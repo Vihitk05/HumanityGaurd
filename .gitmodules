@@ -1,0 +1,3 @@
+[submodule "scalable_backend"]
+	path = scalable_backend
+	url = https://github.com/NamanKu-tech/scalable_backend.git
