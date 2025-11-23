@@ -100,12 +100,12 @@
   /* Enhanced canvas overlay with better glow */
   .captcha-overlay-canvas {
     position: absolute;
-    top: 0;
+    top: auto;
     left: 0;
     pointer-events: none;
     z-index: 10;
-    filter: drop-shadow(0 0 15px rgba(79, 70, 229, 0.08));
   }
+  
   
   /* Premium tile styling with enhanced interactions */
   .captcha-tile {
@@ -457,3 +457,61 @@
     }
   }
   
+/* Tile wrapper must accept pointer events so the rotate button (absolute positioned) is visible & clickable */
+.tile-wrapper {
+  pointer-events: auto;
+  display: block;
+  position: absolute;
+}
+
+/* The tile image itself receives rotation (center) and pointer events for dragging */
+.captcha-tile {
+  pointer-events: auto;
+  transition: transform 0.12s cubic-bezier(.2,.9,.2,1);
+  will-change: transform;
+  transform-origin: 50% 50%;
+  position: relative;
+  z-index: 32;
+  border-radius: 8px;
+}
+
+/* When wrapper is being dragged we apply class, keep visual */
+.tile-wrapper.dragging {
+  z-index: 50;
+  filter: drop-shadow(0 12px 30px rgba(16, 24, 40, 0.18));
+}
+
+/* Rotate button */
+.tile-rotate-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  z-index: 40;
+}
+
+/* nice hover style */
+.tile-rotate-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(79,70,229,0.18);
+}
+
+/* rotate icon color */
+.tile-rotate-btn svg { color: #fff; stroke: #fff; }
+
+/* ensure wrapper children overlay the background correctly */
+.tile-wrapper > * { position: absolute; top: 0; left: 0; }
+
+
+/* ensure buttons are visible on mobile (slightly larger) */
+@media (max-width: 600px) {
+  .tile-rotate-btn { width: 34px; height: 34px; right: 6px; top: 6px; }
+}
+

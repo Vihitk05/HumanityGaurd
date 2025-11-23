@@ -1,13 +1,21 @@
 // src/components/DragDropCaptcha.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchChallenge, verifyChallenge, normalizeBase64 } from '../api';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { fetchChallenge, verifyChallenge, normalizeBase64 } from "../api";
 
+/* Icons */
 const RefreshIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-    <path d="M16 16h5v5" />
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 0 0-9-9" />
+    <path d="M3 12a9 9 0 0 0 9 9" />
+    <path d="M21 3v6h-6" />
+    <path d="M3 21v-6h6" />
+  </svg>
+);
+
+const RotateIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 10v6h-6" />
+    <path d="M3 14a9 9 0 0 0 18-4" />
   </svg>
 );
 
@@ -32,289 +40,332 @@ const XCircleIcon = () => (
   </svg>
 );
 
+const degForTurns = (turns) => (turns % 4) * 90;
+
 export default function DragDropCaptcha() {
   const [challenge, setChallenge] = useState(null);
   const [tiles, setTiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
-  const [status, setStatus] = useState('idle'); // idle, success, failure, cant-say
-  const [statusMessage, setStatusMessage] = useState('Ready');
+  const [status, setStatus] = useState("idle");
+  const [statusMessage, setStatusMessage] = useState("Ready");
   const [error, setError] = useState(null);
 
-  const imageRef = useRef(null);
+  const imgRef = useRef(null);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+
   const dragRef = useRef({
     active: false,
     tileId: null,
     startX: 0,
     startY: 0,
-    initialTileX: 0,
-    initialTileY: 0,
-    el: null,
+    initialX: 0,
+    initialY: 0,
+    wrapperEl: null,
+    imgEl: null,
+    pointerOffsetX: 0,
+    pointerOffsetY: 0,
   });
+
+  const mouseMovements = useRef([]);
 
   const loadChallenge = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setStatus('idle');
-    setStatusMessage('Ready');
-
+    setStatus("idle");
+    setStatusMessage("Ready");
     try {
       const data = await fetchChallenge();
-      const processedTiles = (data.tiles || []).map((tile, index) => ({
-        ...tile,
-        x: 10,
-        y: 10 + index * 80,
-        width: tile.cutout?.width || 72,
-        height: tile.cutout?.height || 72,
-      }));
+      if (data && data.challengeId != null) data.challengeId = String(data.challengeId);
+
+      const processed = (data.tiles || []).map((t, idx) => {
+        const tid = t.tileId ?? t.holeIndex ?? idx;
+        const turns = Math.floor(Math.random() * 4);
+        return {
+          tileId: String(tid),
+          image: t.image ?? "",
+          cutout: t.cutout ?? { x: 0, y: 0, width: 72, height: 72 },
+          x: 12,
+          y: 12 + idx * ((t.cutout?.height || 72) + 12),
+          width: t.cutout?.width || 72,
+          height: t.cutout?.height || 72,
+          turns,
+        };
+      });
+
       setChallenge(data);
-      setTiles(processedTiles);
+      setTiles(processed);
+      setTimeout(() => drawOverlay(data), 60);
     } catch (err) {
-      setError('Failed to load CAPTCHA. Check your connection.');
+      console.error("loadChallenge", err);
+      setError("Failed to load challenge");
     } finally {
       setLoading(false);
+      mouseMovements.current = [];
     }
   }, []);
 
-  useEffect(() => {
-    loadChallenge();
-  }, [loadChallenge]);
+  useEffect(() => { loadChallenge(); }, [loadChallenge]);
 
-  const handleImageLoad = () => {
-    const img = imageRef.current;
+  const drawOverlay = (data = challenge) => {
+    if (!data) return;
     const canvas = canvasRef.current;
-    if (!img || !canvas || !challenge) return;
-  
+    const img = imgRef.current;
+    if (!canvas || !img) return;
+
+    const width = data.imageWidth ?? img.naturalWidth ?? 400;
+    const height = data.imageHeight ?? img.naturalHeight ?? 340;
     const dpr = window.devicePixelRatio || 1;
-    const width = challenge.imageWidth || img.naturalWidth;
-    const height = challenge.imageHeight || img.naturalHeight;
-  
-    // Set canvas CSS size to match image
+
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-  
-    // Set canvas internal resolution (device pixels)
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-  
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
-  
-    // Draw tile cutout overlays
-    challenge.tiles.forEach(tile => {
-      if (!tile.cutout) return;
-      const { x, y, width: w, height: h } = tile.cutout;
-  
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(x, y, w, h);
-  
-      const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
-      gradient.addColorStop(0, 'rgba(0, 212, 255, 0.6)');
-      gradient.addColorStop(0.5, 'rgba(124, 58, 237, 0.4)');
-      gradient.addColorStop(1, 'rgba(0, 212, 255, 0.2)');
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, w, h);
-  
-      ctx.shadowColor = 'rgba(0, 212, 255, 0.3)';
-      ctx.shadowBlur = 12;
-      ctx.strokeRect(x, y, w, h);
-      ctx.shadowBlur = 0;
+
+    (data.tiles || []).forEach(tile => {
+      const c = tile.cutout;
+      if (!c) return;
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      ctx.fillRect(c.x, c.y, c.width, c.height);
+      const g = ctx.createLinearGradient(c.x, c.y, c.x + c.width, c.y + c.height);
+      g.addColorStop(0, "rgba(79,70,229,0.85)");
+      g.addColorStop(1, "rgba(16,185,129,0.65)");
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(c.x + 0.5, c.y + 0.5, c.width - 1, c.height - 1);
     });
   };
-  
 
-  // Smooth Drag Handlers
-  const handlePointerDown = (e, tileId) => {
-    if (status === 'success' || verifying) return;
+  const onImageLoad = () => drawOverlay();
 
-    const tileEl = e.target;
-    const tile = tiles.find(t => t.tileId === tileId);
+  const onPointerDown = (e, tileId) => {
+    if (verifying) return;
+    const imgEl = e.currentTarget;
+    const wrapperEl = imgEl.closest(".tile-wrapper");
+    if (!wrapperEl) return;
+    const tile = tiles.find(t => t.tileId === String(tileId));
     if (!tile) return;
 
     e.stopPropagation();
-    e.target.setPointerCapture(e.pointerId);
+    imgEl.setPointerCapture?.(e.pointerId);
+
+    const wrapperRect = wrapperEl.getBoundingClientRect();
+    const offsetX = e.clientX - wrapperRect.left;
+    const offsetY = e.clientY - wrapperRect.top;
 
     dragRef.current = {
       active: true,
-      tileId,
+      tileId: String(tileId),
       startX: e.clientX,
       startY: e.clientY,
-      initialTileX: tile.x,
-      initialTileY: tile.y,
-      el: tileEl,
+      initialX: tile.x,
+      initialY: tile.y,
+      wrapperEl,
+      imgEl,
+      pointerOffsetX: offsetX,
+      pointerOffsetY: offsetY,
     };
 
-    tileEl.classList.add('dragging');
+    wrapperEl.style.willChange = "transform";
+    wrapperEl.classList.add("dragging");
   };
 
-  const handlePointerMove = (e) => {
-    if (!dragRef.current.active) return;
-
-    const { startX, startY, initialTileX, initialTileY, el, tileId } = dragRef.current;
-    let dx = e.clientX - startX;
-    let dy = e.clientY - startY;
-
-    const tile = tiles.find(t => t.tileId === tileId);
-    if (tile && challenge) {
-      dx = Math.max(-tile.x, Math.min(dx, challenge.imageWidth - tile.width - tile.x));
-      dy = Math.max(-tile.y, Math.min(dy, challenge.imageHeight - tile.height - tile.y));
+  const onPointerMove = (e) => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      mouseMovements.current.push({
+        x: Math.round(e.clientX - rect.left),
+        y: Math.round(e.clientY - rect.top),
+        t: Date.now()
+      });
     }
 
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    if (!dragRef.current.active) return;
+    const { wrapperEl, tileId, initialX, initialY, pointerOffsetX, pointerOffsetY } = dragRef.current;
+    const imgEl = imgRef.current;
+    if (!wrapperEl || !imgEl) return;
+
+    const imgRect = imgEl.getBoundingClientRect();
+    let desiredX = e.clientX - imgRect.left - pointerOffsetX;
+    let desiredY = e.clientY - imgRect.top - pointerOffsetY;
+
+    const tile = tiles.find(t => t.tileId === String(tileId));
+    if (tile && challenge) {
+      desiredX = Math.max(0, Math.min(desiredX, challenge.imageWidth - tile.width));
+      desiredY = Math.max(0, Math.min(desiredY, challenge.imageHeight - tile.height));
+    }
+
+    const dx = desiredX - initialX;
+    const dy = desiredY - initialY;
+    wrapperEl.style.transform = `translate(${dx}px, ${dy}px)`;
   };
 
-  const handlePointerUp = () => {
+  const onPointerUp = (e) => {
     if (!dragRef.current.active) return;
-    const { tileId, el } = dragRef.current;
+    const { wrapperEl, tileId, pointerOffsetX, pointerOffsetY } = dragRef.current;
+    const imgEl = imgRef.current;
+    if (!wrapperEl || !imgEl) return;
 
-    const transform = el.style.transform;
-    const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(transform);
-    let dx = 0, dy = 0;
-    if (match) { dx = parseFloat(match[1]); dy = parseFloat(match[2]); }
+    const imgRect = imgEl.getBoundingClientRect();
+    let finalX = Math.round(e.clientX - imgRect.left - pointerOffsetX);
+    let finalY = Math.round(e.clientY - imgRect.top - pointerOffsetY);
 
-    setTiles(prev => prev.map(t => t.tileId === tileId ? { ...t, x: t.x + dx, y: t.y + dy } : t));
+    const tile = tiles.find(t => t.tileId === String(tileId));
+    if (tile && challenge) {
+      finalX = Math.max(0, Math.min(finalX, challenge.imageWidth - tile.width));
+      finalY = Math.max(0, Math.min(finalY, challenge.imageHeight - tile.height));
+    }
 
-    el.style.transform = '';
-    el.classList.remove('dragging');
-    dragRef.current.active = false;
+    wrapperEl.style.left = finalX + "px";
+    wrapperEl.style.top = finalY + "px";
+    wrapperEl.style.transform = "";
+
+    setTiles(prev => prev.map(t => t.tileId === String(tileId) ? { ...t, x: finalX, y: finalY } : t));
+
+    wrapperEl.style.willChange = "";
+    wrapperEl.classList.remove("dragging");
+    dragRef.current = { active: false, tileId: null, startX:0, startY:0, initialX:0, initialY:0, wrapperEl:null, imgEl:null, pointerOffsetX:0, pointerOffsetY:0 };
   };
 
   useEffect(() => {
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerUp);
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [challenge]);
+  }, [tiles, challenge]);
+
+  const rotateTile = (tileId, e) => {
+    e?.stopPropagation();
+    setTiles(prev => prev.map(t => t.tileId === String(tileId) ? { ...t, turns: (t.turns + 1) % 4 } : t));
+  };
+
+  const buildVerifyPayloadFromDOM = () => {
+    const imgEl = imgRef.current;
+    if (!imgEl) return tiles.map(t => ({ tileId: t.tileId, x: t.x, y: t.y, turn: t.turns }));
+    const imgRect = imgEl.getBoundingClientRect();
+    return tiles.map(t => {
+      const wrapper = document.querySelector(`.tile-wrapper[data-tile-id="${CSS.escape(t.tileId)}"]`);
+      if (!wrapper) return { tileId: t.tileId, x: t.x, y: t.y, turn: t.turns };
+      const wRect = wrapper.getBoundingClientRect();
+      let x = Math.round(wRect.left - imgRect.left);
+      let y = Math.round(wRect.top - imgRect.top);
+      if (challenge) {
+        x = Math.max(0, Math.min(x, challenge.imageWidth - wrapper.offsetWidth));
+        y = Math.max(0, Math.min(y, challenge.imageHeight - wrapper.offsetHeight));
+      }
+      return { tileId: t.tileId, x, y, turn: t.turns };
+    });
+  };
 
   const handleVerify = async () => {
     if (!challenge) return;
-  
     setVerifying(true);
-    setStatusMessage('Verifying...');
-  
+    setStatusMessage("Verifying...");
+
+    const payloadTiles = buildVerifyPayloadFromDOM();
+    const payload = {
+      challengeId: challenge.challengeId,
+      tiles: payloadTiles,
+      mouse: {
+        viewportWidth: containerRef.current?.offsetWidth || 0,
+        viewportHeight: containerRef.current?.offsetHeight || 0,
+        events: mouseMovements.current
+      }
+    };
+
     try {
-      const payloadTiles = tiles.map(t => ({
-        tileId: t.tileId,
-        x: Math.round(t.x),
-        y: Math.round(t.y)
-      }));
-  
-      const result = await verifyChallenge(challenge.challengeId, payloadTiles);
-  
-      // Update status according to response
-      if (result.success === true) {
-        setStatus('success');
-        setStatusMessage('Verification Successful');
-      } else if (result.success === false) {
-        setStatus('failure');
-        setStatusMessage(result.message || 'Verification Failed');
+      const res = await verifyChallenge(payload.challengeId, payload.tiles, payload.mouse);
+      const result = res?.result ?? res?.status ?? (res?.success === true ? "pass" : "fail");
+
+      if (result === "pass") {
+        setStatus("success");
+        setStatusMessage("Verified (pass)");
+      } else if (result === "fail") {
+        setStatus("failure");
+        setStatusMessage("Verification failed");
       } else {
-        setStatus('cant-say');
-        setStatusMessage('Cannot Determine');
+        setStatus("cant-say");
+        setStatusMessage("Can't determine");
       }
     } catch (err) {
-      setStatus('failure');
-      setStatusMessage('Network Error');
+      console.error(err);
+      setStatus("failure");
+      setStatusMessage("Network error");
     } finally {
-      // Load a new challenge after 1.4s regardless of the outcome
       setTimeout(() => {
-        loadChallenge();
         setVerifying(false);
+        loadChallenge();
       }, 1400);
     }
   };
-  
+
+  const bgSrc = challenge ? normalizeBase64(challenge.baseImage) : "";
 
   return (
-    <div className="captcha-card">
-      <div
-        className="captcha-stage"
-        ref={containerRef}
-        style={{
-          width: challenge ? challenge.imageWidth : 400,
-          height: challenge ? challenge.imageHeight : 340
-        }}
-      >
+    <div className="captcha-card" style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div className="captcha-stage" ref={containerRef} style={{ width: challenge?.imageWidth ?? 400, height: challenge?.imageHeight ?? 340, overflow: "visible" }}>
         {loading && <div className="skeleton-loader" />}
-        {challenge && (
-          <>
-            <img
-              ref={imageRef}
-              src={normalizeBase64(challenge.baseImage) || "/placeholder.svg"}
-              alt="Security Challenge"
-              className="captcha-bg-image"
-              onLoad={handleImageLoad}
-              width={challenge.imageWidth}
-              height={challenge.imageHeight}
-            />
-            <canvas ref={canvasRef} className="captcha-overlay-canvas" />
-            {tiles.map(tile => (
-              <img
-                key={tile.tileId}
-                data-tile-id={tile.tileId}
-                src={normalizeBase64(tile.image) || "/placeholder.svg"}
-                alt="Puzzle Piece"
-                className="captcha-tile"
-                style={{ left: tile.x, top: tile.y, width: tile.width, height: tile.height }}
-                onPointerDown={(e) => handlePointerDown(e, tile.tileId)}
-                draggable={false}
-              />
-            ))}
-          </>
-        )}
-        {status !== 'idle' && (
-          <div className="result-overlay">
-            <div className="result-content">
-              {status === 'success' ? (
-                <>
-                  <CheckCircleIcon />
-                  <div className="result-message">{statusMessage}</div>
-                </>
-              ) : (
-                <>
-                  <XCircleIcon />
-                  <div className="result-message">{statusMessage}</div>
-                </>
-              )}
+        {challenge && <>
+          <img ref={imgRef} src={bgSrc} alt="captcha background" onLoad={onImageLoad} width={challenge.imageWidth} height={challenge.imageHeight} style={{ objectFit: "cover" }} />
+          <canvas ref={canvasRef} className="captcha-overlay-canvas" />
+          {tiles.map(t => {
+            const deg = degForTurns(t.turns);
+            return (
+              <div key={t.tileId} className="tile-wrapper" data-tile-id={t.tileId} style={{ position: "absolute", left: t.x, top: t.y, width: t.width, height: t.height, zIndex: 30 }}>
+                <img
+                  data-tile-id={t.tileId}
+                  src={normalizeBase64(t.image)}
+                  alt="tile"
+                  onPointerDown={(e) => onPointerDown(e, t.tileId)}
+                  draggable={false}
+                  style={{ width: t.width, height: t.height, transform: `rotate(${deg}deg)`, transformOrigin: "50% 50%", display: "block", borderRadius: 8, boxShadow: "0 8px 20px rgba(0,0,0,0.08)" }}
+                />
+                <button type="button" onClick={(e) => rotateTile(t.tileId, e)} style={{ position: "absolute", right: 6, top: 6, width: 30, height: 30, borderRadius: 999, border: "none", background: "linear-gradient(135deg,#4f46e5,#06b6d4)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 40 }}>
+                  <RotateIcon />
+                </button>
+              </div>
+            );
+          })}
+          {status !== "idle" && (
+            <div className="result-overlay" style={{ position: "absolute", top:0, left:0, width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(255,255,255,0.6)", zIndex:50 }}>
+              <div className="result-content" style={{ textAlign:"center" }}>
+                {status === "success" && <><CheckCircleIcon /><div className="result-message success">{statusMessage}</div></>}
+                {status === "failure" && <><XCircleIcon /><div className="result-message error">{statusMessage}</div></>}
+                {status === "cant-say" && <>
+                  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
+                  <div className="result-message neutral">{statusMessage}</div>
+                </>}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </>}
       </div>
 
       <div className="captcha-panel">
         <div className="panel-header">
-          <div>
-            <ShieldIcon />
-            <h1 className="brand-title">Humanity Guard</h1>
-          </div>
+          <div><ShieldIcon /><h1 className="brand-title">Humanity Guard</h1></div>
           <div className="brand-subtitle">Security Verification</div>
         </div>
-
-        <div className="instructions">
-          Drag the puzzle pieces to their correct positions to verify you are human.
-        </div>
-
+        <div className="instructions">Drag each tile to the matching cutout, rotate as needed, then press Verify.</div>
         <div className="status-display">
           <span>Status:</span>
           <span className={`status-text ${status}`}>{statusMessage}</span>
         </div>
-
-        {error && <div style={{ color: 'var(--error-color)', fontSize: '0.8rem', marginBottom: '10px' }}>{error}</div>}
-
+        {error && <div style={{ color: "var(--error-color)" }}>{error}</div>}
         <div className="panel-actions">
-          <button className="btn btn-verify" onClick={handleVerify} disabled={loading || verifying || status === 'success'}>
-            {verifying ? 'Verifying...' : 'Verify Identity'}
+          <button className="btn btn-verify" onClick={handleVerify} disabled={loading || verifying}>
+            {verifying ? "Verifying..." : "Verify Identity"}
           </button>
-          <button className="btn btn-refresh" onClick={loadChallenge} disabled={loading || verifying}>
-            <RefreshIcon />
-            Refresh Challenge
+          <button className="btn btn-refresh" onClick={() => loadChallenge()} disabled={loading || verifying}>
+            <RefreshIcon /> Refresh Challenge
           </button>
         </div>
       </div>
