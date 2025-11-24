@@ -1,5 +1,5 @@
 // src/api.js
-export const API_BASE = "http://localhost:8000";
+export const API_BASE = "https://humanity-gaurd.onrender.com";
 
 async function handleJsonResponse(res) {
   const text = await res.text();
