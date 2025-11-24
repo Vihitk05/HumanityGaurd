@@ -310,7 +310,7 @@ export default function DragDropCaptcha() {
 
   return (
     <div className="captcha-card" style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div className="captcha-stage" ref={containerRef} style={{ width: challenge?.imageWidth ?? 400, height: challenge?.imageHeight ?? 340, overflow: "visible" }}>
+      <div className="captcha-stage" ref={containerRef} style={{ width: challenge?.imageWidth ?? 400, height: challenge?.imageHeight ?? 340, overflow: "visible",paddingTop:"4%"}}>
         {loading && <div className="skeleton-loader" />}
         {challenge && <>
           <img ref={imgRef} src={bgSrc} alt="captcha background" onLoad={onImageLoad} width={challenge.imageWidth} height={challenge.imageHeight} style={{ objectFit: "cover" }} />
@@ -318,7 +318,7 @@ export default function DragDropCaptcha() {
           {tiles.map(t => {
             const deg = degForTurns(t.turns);
             return (
-              <div key={t.tileId} className="tile-wrapper" data-tile-id={t.tileId} style={{ position: "absolute", left: t.x, top: t.y, width: t.width, height: t.height, zIndex: 30 }}>
+              <div key={t.tileId} className="tile-wrapper" data-tile-id={t.tileId} style={{ position: "absolute", left: t.x, top: t.y, width: t.width, height: t.height, zIndex: 30, marginTop: "12%" }}>
                 <img
                   data-tile-id={t.tileId}
                   src={normalizeBase64(t.image)}
