@@ -351,19 +351,6 @@ export default function DragDropCaptcha() {
   const bgSrc = challenge ? normalizeBase64(challenge.baseImage) : "";
 
   return (
-<<<<<<< HEAD
-    <div className="captcha-card" style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div className="captcha-stage" ref={containerRef} style={{ width: challenge?.imageWidth ?? 400, height: challenge?.imageHeight ?? 340, overflow: "visible",paddingTop:"4%"}}>
-        {loading && <div className="skeleton-loader" />}
-        {challenge && <>
-          <img ref={imgRef} src={bgSrc} alt="captcha background" onLoad={onImageLoad} width={challenge.imageWidth} height={challenge.imageHeight} style={{ objectFit: "cover" }} />
-          <canvas ref={canvasRef} className="captcha-overlay-canvas" />
-          {tiles.map(t => {
-            const deg = degForTurns(t.turns);
-            return (
-              <div key={t.tileId} className="tile-wrapper" data-tile-id={t.tileId} style={{ position: "absolute", left: t.x, top: t.y, width: t.width, height: t.height, zIndex: 30, marginTop: "12%" }}>
-                <img
-=======
     <div
       className="captcha-card"
       style={{
@@ -434,7 +421,6 @@ export default function DragDropCaptcha() {
                 <div
                   key={t.tileId}
                   className="tile-wrapper"
->>>>>>> 2874b1e (fix bugs)
                   data-tile-id={t.tileId}
                   style={{
                     position: "absolute",
