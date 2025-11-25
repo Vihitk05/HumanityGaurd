@@ -49,6 +49,7 @@ export default function DragDropCaptcha() {
   const [status, setStatus] = useState("idle");
   const [statusMessage, setStatusMessage] = useState("Ready");
   const [error, setError] = useState(null);
+  const [stateToken, setStateToken] = useState(null);
 
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
@@ -69,18 +70,32 @@ export default function DragDropCaptcha() {
 
   const mouseMovements = useRef([]);
 
-  const loadChallenge = useCallback(async () => {
+  const loadChallenge = async (tokenToSend = null) => {
     setLoading(true);
     setError(null);
     setStatus("idle");
     setStatusMessage("Ready");
+
     try {
-      const data = await fetchChallenge();
-      if (data && data.challengeId != null) data.challengeId = String(data.challengeId);
+      const data = await fetchChallenge(tokenToSend);
+
+      if (data && data.challengeId != null) {
+        data.challengeId = String(data.challengeId);
+      }
+
+      if (data?.stateToken || data?.state_token) {
+        setStateToken(data.stateToken ?? data.state_token);
+      }
 
       const processed = (data.tiles || []).map((t, idx) => {
         const tid = t.tileId ?? t.holeIndex ?? idx;
-        const turns = Math.floor(Math.random() * 4);
+        const turns =
+          typeof t.turns === "number"
+            ? t.turns
+            : typeof t.turn === "number"
+            ? t.turn
+            : 0;
+
         return {
           tileId: String(tid),
           image: t.image ?? "",
@@ -103,10 +118,12 @@ export default function DragDropCaptcha() {
       setLoading(false);
       mouseMovements.current = [];
     }
+  };
+
+  useEffect(() => {
+    loadChallenge();
+    
   }, []);
-
-  useEffect(() => { loadChallenge(); }, [loadChallenge]);
-
   const drawOverlay = (data = challenge) => {
     if (!data) return;
     const canvas = canvasRef.current;
@@ -140,6 +157,7 @@ export default function DragDropCaptcha() {
       ctx.strokeRect(c.x + 0.5, c.y + 0.5, c.width - 1, c.height - 1);
     });
   };
+
 
   const onImageLoad = () => drawOverlay();
 
@@ -281,8 +299,22 @@ export default function DragDropCaptcha() {
     };
 
     try {
-      const res = await verifyChallenge(payload.challengeId, payload.tiles, payload.mouse);
-      const result = res?.result ?? res?.status ?? (res?.success === true ? "pass" : "fail");
+      const res = await verifyChallenge(
+        payload.challengeId,
+        payload.tiles,
+        payload.mouse,
+        stateToken
+      );
+
+      const result =
+        res?.result ??
+        res?.status ??
+        (res?.success === true ? "pass" : "fail");
+
+      const verifyStateToken = res?.stateToken ?? res?.state_token ?? stateToken;
+      if (verifyStateToken) {
+        setStateToken(verifyStateToken);
+      }
 
       if (result === "pass") {
         setStatus("success");
@@ -293,6 +325,17 @@ export default function DragDropCaptcha() {
       } else {
         setStatus("cant-say");
         setStatusMessage("Can't determine");
+
+        setTimeout(() => {
+          setVerifying(false);
+          if (verifyStateToken) {
+            loadChallenge(verifyStateToken);
+          } else {
+            loadChallenge();
+          }
+        }, 1400);
+
+        return;
       }
     } catch (err) {
       console.error(err);
@@ -301,7 +344,6 @@ export default function DragDropCaptcha() {
     } finally {
       setTimeout(() => {
         setVerifying(false);
-        loadChallenge();
       }, 1400);
     }
   };
@@ -309,6 +351,7 @@ export default function DragDropCaptcha() {
   const bgSrc = challenge ? normalizeBase64(challenge.baseImage) : "";
 
   return (
+<<<<<<< HEAD
     <div className="captcha-card" style={{ maxWidth: 1000, margin: "0 auto" }}>
       <div className="captcha-stage" ref={containerRef} style={{ width: challenge?.imageWidth ?? 400, height: challenge?.imageHeight ?? 340, overflow: "visible",paddingTop:"4%"}}>
         {loading && <div className="skeleton-loader" />}
@@ -320,50 +363,226 @@ export default function DragDropCaptcha() {
             return (
               <div key={t.tileId} className="tile-wrapper" data-tile-id={t.tileId} style={{ position: "absolute", left: t.x, top: t.y, width: t.width, height: t.height, zIndex: 30, marginTop: "12%" }}>
                 <img
+=======
+    <div
+      className="captcha-card"
+      style={{
+        maxWidth: 1000,
+        margin: "0 auto",
+        display: "flex",
+        alignItems: "center",
+        padding: 24,
+        gap: 32,
+      }}
+    >
+      {/* LEFT: image + 7px padding outside stage */}
+      <div
+        ref={containerRef}
+        style={{
+          flex: "0 0 auto",
+          padding: 0, 
+          borderRadius: 16,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          boxSizing: "border-box",
+        }}
+      >
+        {challenge && (
+          <div
+            className="captcha-stage"
+            style={{
+              position: "relative",
+              width: challenge.imageWidth ?? 400,
+              height: challenge.imageHeight ?? 340,
+              overflow: "hidden",
+              boxSizing: "content-box",
+            }}
+          >
+            {loading && <div className="skeleton-loader" />}
+            <img
+              ref={imgRef}
+              src={bgSrc}
+              alt="captcha background"
+              onLoad={onImageLoad}
+              width={challenge.imageWidth}
+              height={challenge.imageHeight}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: challenge.imageWidth,
+                height: challenge.imageHeight,
+                objectFit: "cover",
+                pointerEvents: "none",
+                display: "block",
+              }}
+            />
+            <canvas
+              ref={canvasRef}
+              className="captcha-overlay-canvas"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                pointerEvents: "none",
+              }}
+            />
+            {tiles.map((t) => {
+              const deg = degForTurns(t.turns);
+              return (
+                <div
+                  key={t.tileId}
+                  className="tile-wrapper"
+>>>>>>> 2874b1e (fix bugs)
                   data-tile-id={t.tileId}
-                  src={normalizeBase64(t.image)}
-                  alt="tile"
-                  onPointerDown={(e) => onPointerDown(e, t.tileId)}
-                  draggable={false}
-                  style={{ width: t.width, height: t.height, transform: `rotate(${deg}deg)`, transformOrigin: "50% 50%", display: "block", borderRadius: 8, boxShadow: "0 8px 20px rgba(0,0,0,0.08)" }}
-                />
-                <button type="button" onClick={(e) => rotateTile(t.tileId, e)} style={{ position: "absolute", right: 6, top: 6, width: 30, height: 30, borderRadius: 999, border: "none", background: "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 40 }}>
-                  <RotateIcon />
-                </button>
+                  style={{
+                    position: "absolute",
+                    left: t.x,
+                    top: t.y,
+                    width: t.width,
+                    height: t.height,
+                    zIndex: 30,
+                  }}
+                >
+                  <img
+                    data-tile-id={t.tileId}
+                    src={normalizeBase64(t.image)}
+                    alt="tile"
+                    onPointerDown={(e) => onPointerDown(e, t.tileId)}
+                    draggable={false}
+                    style={{
+                      width: t.width,
+                      height: t.height,
+                      transform: `rotate(${deg}deg)`,
+                      transformOrigin: "50% 50%",
+                      display: "block",
+                      borderRadius: 8,
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => rotateTile(t.tileId, e)}
+                    style={{
+                      position: "absolute",
+                      right: 6,
+                      top: 6,
+                      width: 30,
+                      height: 30,
+                      borderRadius: 999,
+                      border: "none",
+                      background: "transparent",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      zIndex: 40,
+                    }}
+                  >
+                    <RotateIcon />
+                  </button>
+                </div>
+              );
+            })}
+            {status !== "idle" && (
+              <div
+                className="result-overlay"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(255,255,255,0.6)",
+                  zIndex: 50,
+                }}
+              >
+                <div
+                  className="result-content"
+                  style={{ textAlign: "center" }}
+                >
+                  {status === "success" && (
+                    <>
+                      <CheckCircleIcon />
+                      <div className="result-message success">
+                        {statusMessage}
+                      </div>
+                    </>
+                  )}
+                  {status === "failure" && (
+                    <>
+                      <XCircleIcon />
+                      <div className="result-message error">
+                        {statusMessage}
+                      </div>
+                    </>
+                  )}
+                  {status === "cant-say" && (
+                    <>
+                      <svg
+                        width="80"
+                        height="80"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#f59e0b"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <circle cx="12" cy="16" r="1" />
+                      </svg>
+                      <div className="result-message neutral">
+                        {statusMessage}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            );
-          })}
-          {status !== "idle" && (
-            <div className="result-overlay" style={{ position: "absolute", top:0, left:0, width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(255,255,255,0.6)", zIndex:50 }}>
-              <div className="result-content" style={{ textAlign:"center" }}>
-                {status === "success" && <><CheckCircleIcon /><div className="result-message success">{statusMessage}</div></>}
-                {status === "failure" && <><XCircleIcon /><div className="result-message error">{statusMessage}</div></>}
-                {status === "cant-say" && <>
-                  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
-                  <div className="result-message neutral">{statusMessage}</div>
-                </>}
-              </div>
-            </div>
-          )}
-        </>}
+            )}
+          </div>
+        )}
       </div>
 
+      {/* RIGHT: panel */}
       <div className="captcha-panel">
         <div className="panel-header">
-          <div><ShieldIcon /><h1 className="brand-title">Humanity Guard</h1></div>
+          <div>
+            <ShieldIcon />
+            <h1 className="brand-title">Humanity Guard</h1>
+          </div>
           <div className="brand-subtitle">Security Verification</div>
         </div>
-        <div className="instructions">Drag each tile to the matching cutout, rotate as needed, then press Verify.</div>
+        <div className="instructions">
+          Drag each tile to the matching cutout, rotate as needed, then press
+          Verify.
+        </div>
         <div className="status-display">
           <span>Status:</span>
           <span className={`status-text ${status}`}>{statusMessage}</span>
         </div>
-        {error && <div style={{ color: "var(--error-color)" }}>{error}</div>}
+        {error && (
+          <div style={{ color: "var(--error-color)" }}>{error}</div>
+        )}
         <div className="panel-actions">
-          <button className="btn btn-verify" onClick={handleVerify} disabled={loading || verifying}>
+          <button
+            className="btn btn-verify"
+            onClick={handleVerify}
+            disabled={loading || verifying}
+          >
             {verifying ? "Verifying..." : "Verify Identity"}
           </button>
-          <button className="btn btn-refresh" onClick={() => loadChallenge()} disabled={loading || verifying}>
+          <button
+            className="btn btn-refresh"
+            onClick={() => loadChallenge()}
+            disabled={loading || verifying}
+          >
             <RefreshIcon /> Refresh Challenge
           </button>
         </div>

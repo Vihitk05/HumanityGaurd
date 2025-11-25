@@ -7,18 +7,28 @@ async function handleJsonResponse(res) {
   catch (e) { throw new Error(`Invalid JSON response: ${text}`); }
 }
 
-export async function fetchChallenge() {
-  const res = await fetch(`${API_BASE}/challenges`, { method: "GET" });
+export async function fetchChallenge(stateToken) {
+  const headers = {};
+  if (stateToken) {
+    headers["X-State-Token"] = stateToken;
+  }
+  const res = await fetch(`${API_BASE}/challenges`, { method: "GET" , headers});
   if (!res.ok) throw new Error(`Failed to fetch challenge (${res.status})`);
   return await handleJsonResponse(res);
 }
 
 // Updated verifyChallenge to include mouse events
-export async function verifyChallenge(challengeId, tiles, mouse) {
+export async function verifyChallenge(challengeId, tiles, mouse, stateToken) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (stateToken) {
+    headers["X-State-Token"] = stateToken;
+  }
   const payload = { challengeId, tiles, mouse };
   const res = await fetch(`${API_BASE}/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
