@@ -51,3 +51,20 @@ export function normalizeBase64(s) {
   if (s.startsWith("data:")) return s;
   return `data:image/png;base64,${s}`;
 }
+
+export async function fetchCaptchaLogs() {
+  const res = await fetch(`${API_BASE}/logs`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch logs: ${res.status}`);
+  }
+
+  const data = await res.json();
+  // Support both: array or { logs: [...] }
+  return Array.isArray(data) ? data : data.logs ?? [];
+}

@@ -1,10 +1,10 @@
-import React from 'react';
-import DragDropCaptcha from './components/DragDropCaptcha';
+import React from "react";
+import CaptchaDashboard from "./components/CaptchaDashboard";
 
 export default function App() {
   return (
     <div className="app-container">
-      <DragDropCaptcha />
+      <CaptchaDashboard />
     </div>
   );
 }
