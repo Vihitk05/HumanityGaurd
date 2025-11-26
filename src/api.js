@@ -1,5 +1,5 @@
 // src/api.js
-export const API_BASE = "https://humanity-gaurd.onrender.com";
+export const API_BASE = "http://localhost:8000";
 
 async function handleJsonResponse(res) {
   const text = await res.text();
@@ -18,7 +18,7 @@ export async function fetchChallenge(stateToken) {
 }
 
 // Updated verifyChallenge to include mouse events
-export async function verifyChallenge(challengeId, tiles, mouse, stateToken) {
+export async function verifyChallenge(challengeId, tiles, mouse, stateToken, fingerprint) {
   const headers = {
     "Content-Type": "application/json",
   };
@@ -26,6 +26,9 @@ export async function verifyChallenge(challengeId, tiles, mouse, stateToken) {
     headers["X-State-Token"] = stateToken;
   }
   const payload = { challengeId, tiles, mouse };
+  if (fingerprint) {
+    payload.fingerprint = fingerprint; 
+  }
   const res = await fetch(`${API_BASE}/verify`, {
     method: "POST",
     headers,

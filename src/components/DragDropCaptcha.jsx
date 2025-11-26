@@ -1,6 +1,7 @@
 // src/components/DragDropCaptcha.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { fetchChallenge, verifyChallenge, normalizeBase64 } from "../api";
+import { getClientFingerprint } from "./clientFingerprint";
 
 /* Icons */
 const RefreshIcon = () => (
