@@ -71,3 +71,24 @@ export async function fetchCaptchaLogs() {
   // Support both: array or { logs: [...] }
   return Array.isArray(data) ? data : data.logs ?? [];
 }
+
+export async function checkRateLimit(visitorId, context) {
+  const payload = {
+    visitorId: visitorId ?? null,
+    context: context ?? "challenge",   // tell backend if this is for challenge/verify
+  };
+
+  const res = await fetch(`${API_BASE}/rate_limit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    throw new Error(`Rate-limit API error: ${res.status}`);
+  }
+
+  return res.json();
+}

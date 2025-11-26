@@ -41,9 +41,7 @@ export default function CaptchaDashboard() {
             textTransform: "uppercase",
             letterSpacing: "0.5px",
             color:
-              activeTab === TAB_CAPTCHA
-                ? "#4f46e5"
-                : "rgba(0,0,0,0.35)",
+              activeTab === TAB_CAPTCHA ? "#4f46e5" : "rgba(0,0,0,0.35)",
             borderBottom:
               activeTab === TAB_CAPTCHA
                 ? "3px solid #4f46e5"
@@ -67,9 +65,7 @@ export default function CaptchaDashboard() {
             textTransform: "uppercase",
             letterSpacing: "0.5px",
             color:
-              activeTab === TAB_STATS
-                ? "#4f46e5"
-                : "rgba(0,0,0,0.35)",
+              activeTab === TAB_STATS ? "#4f46e5" : "rgba(0,0,0,0.35)",
             borderBottom:
               activeTab === TAB_STATS
                 ? "3px solid #4f46e5"
@@ -123,12 +119,14 @@ function CaptchaStats() {
     };
 
     loadLogs();
-    return () => (cancelled = true);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const summary = logs.reduce(
     (acc, log) => {
-      const r = (log.result || "").toLowerCase();
+      const r = getResultFromLog(log).toLowerCase();
       if (r === "pass") acc.pass++;
       else if (r === "fail") acc.fail++;
       else acc.other++;
@@ -185,33 +183,41 @@ function CaptchaStats() {
                   <Th>Attempt</Th>
                   <Th>Position Score</Th>
                   <Th>Mouse Score</Th>
+                  <Th style={{ minWidth: 190 }}>Fingerprint score</Th>
                   <Th>Final Score</Th>
                   <Th>Result</Th>
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log, i) => (
-                  <tr
-                    key={i}
-                    style={{
-                      background: i % 2 === 0 ? "#ffffff" : "#f9fafb",
-                    }}
-                  >
-                    <Td>{formatTimestamp(log.timestamp)}</Td>
-                    <Td>{log.challenge_id}</Td>
-                    <Td>{log.attempt}</Td>
-                    <Td>{fmtScore(log.position_score)}</Td>
-                    <Td>{fmtScore(log.mouse_score)}</Td>
-                    <Td>{fmtScore(log.final_score)}</Td>
-                    <Td>
-                      <ResultBadge result={log.result} />
-                    </Td>
-                  </tr>
-                ))}
+                {logs.map((log, i) => {
+                  const resultValue = getResultFromLog(log);
+
+                  return (
+                    <tr
+                      key={i}
+                      style={{
+                        background: i % 2 === 0 ? "#ffffff" : "#f9fafb",
+                      }}
+                    >
+                      <Td>{formatTimestamp(log.timestamp)}</Td>
+                      <Td>{log.challenge_id}</Td>
+                      <Td>{log.attempt}</Td>
+                      <Td>{fmtScore(log.position_score)}</Td>
+                      <Td>{fmtScore(log.mouse_score)}</Td>
+                      <Td style={{ minWidth: 190 }}>
+                        <FingerprintCell log={log} />
+                      </Td>
+                      <Td>{fmtScore(log.final_score)}</Td>
+                      <Td>
+                        <ResultBadge result={resultValue} />
+                      </Td>
+                    </tr>
+                  );
+                })}
 
                 {logs.length === 0 && (
                   <tr>
-                    <Td colSpan={7} style={{ textAlign: "center", padding: 16 }}>
+                    <Td colSpan={8} style={{ textAlign: "center", padding: 16 }}>
                       No logs available
                     </Td>
                   </tr>
@@ -245,7 +251,7 @@ function SummaryCard({ label, value }) {
   );
 }
 
-function Th({ children }) {
+function Th({ children, style }) {
   return (
     <th
       style={{
@@ -256,6 +262,7 @@ function Th({ children }) {
         fontWeight: 600,
         color: "#374151",
         whiteSpace: "nowrap",
+        ...(style || {}),
       }}
     >
       {children}
@@ -263,13 +270,14 @@ function Th({ children }) {
   );
 }
 
-function Td({ children, colSpan }) {
+function Td({ children, colSpan, style }) {
   return (
     <td
       colSpan={colSpan}
       style={{
         padding: "8px 12px",
         borderBottom: "1px solid #f3f4f6",
+        ...(style || {}),
       }}
     >
       {children}
@@ -312,6 +320,90 @@ function ResultBadge({ result }) {
 }
 
 /* -----------------------------------------------
+   Fingerprint helpers
+------------------------------------------------ */
+
+const FP_NUMERIC_KEYS = [
+  "fp_confidence",
+  "fp_bot_probability",
+  "fp_consistency_score",
+  "fp_behavioral_score",
+  "fp_entropy_strength",
+  "fp_client_confidence",
+  "fp_fingerprint_score",
+];
+
+const FP_LABELS = {
+  fp_confidence: "Conf",
+  fp_bot_probability: "BotProb",
+  fp_consistency_score: "Consist",
+  fp_behavioral_score: "Behav",
+  fp_entropy_strength: "Entropy",
+  fp_client_confidence: "ClientConf",
+  fp_fingerprint_score: "FPScore",
+};
+
+function formatFpNumber(v) {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (Number.isNaN(n)) return null;
+  return n.toFixed(3);
+}
+
+function FingerprintCell({ log }) {
+  const entries = FP_NUMERIC_KEYS.reduce((acc, key) => {
+    const raw = log[key];
+    const formatted = formatFpNumber(raw);
+    if (formatted === null) return acc;
+    acc.push({
+      key,
+      label: FP_LABELS[key] || key,
+      value: formatted,
+    });
+    return acc;
+  }, []);
+
+  if (entries.length === 0) {
+    return <span style={{ opacity: 0.6 }}>–</span>;
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "90px 60px", // label | value
+        rowGap: "4px",
+        columnGap: "6px",
+        padding: "4px 0",
+      }}
+    >
+      {entries.map((m) => (
+        <React.Fragment key={m.key}>
+          <span
+            style={{
+              fontSize: "11px",
+              opacity: 0.7,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {m.label}
+          </span>
+          <span
+            style={{
+              fontFamily: "monospace",
+              fontSize: "12px",
+              textAlign: "right",
+            }}
+          >
+            {m.value}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+/* -----------------------------------------------
    Utility
 ------------------------------------------------ */
 
@@ -325,4 +417,15 @@ function formatTimestamp(ts) {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
   return d.toLocaleString();
+}
+
+// Prefer `result`, then fallback to outcome/status, etc.
+function getResultFromLog(log) {
+  return (
+    log.result ??
+    log.outcome ??
+    log.final_outcome ??
+    log.status ??
+    ""
+  );
 }

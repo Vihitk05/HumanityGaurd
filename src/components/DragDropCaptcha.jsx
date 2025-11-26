@@ -1,11 +1,25 @@
 // src/components/DragDropCaptcha.jsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { fetchChallenge, verifyChallenge, normalizeBase64 } from "../api";
-import { getClientFingerprint } from "./clientFingerprint";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  fetchChallenge,
+  verifyChallenge,
+  normalizeBase64,
+  checkRateLimit, // from ../api
+} from "../api";
+import { getClientFingerprint } from "./clientFingerprint"; // adjust path if needed
 
 /* Icons */
 const RefreshIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M21 12a9 9 0 0 0-9-9" />
     <path d="M3 12a9 9 0 0 0 9 9" />
     <path d="M21 3v6h-6" />
@@ -14,26 +28,61 @@ const RefreshIcon = () => (
 );
 
 const RotateIcon = () => (
-  <svg width="800px" height="800px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#000000" d="M14.9547098,7.98576084 L15.0711,7.99552 C15.6179,8.07328 15.9981,8.57957 15.9204,9.12636 C15.6826,10.7983 14.9218,12.3522 13.747,13.5654 C12.5721,14.7785 11.0435,15.5888 9.37999,15.8801 C7.7165,16.1714 6.00349,15.9288 4.48631,15.187 C3.77335,14.8385 3.12082,14.3881 2.5472,13.8537 L1.70711,14.6938 C1.07714,15.3238 3.55271368e-15,14.8776 3.55271368e-15,13.9867 L3.55271368e-15,9.99998 L3.98673,9.99998 C4.87763,9.99998 5.3238,11.0771 4.69383,11.7071 L3.9626,12.4383 C4.38006,12.8181 4.85153,13.1394 5.36475,13.3903 C6.50264,13.9466 7.78739,14.1285 9.03501,13.9101 C10.2826,13.6916 11.4291,13.0839 12.3102,12.174 C13.1914,11.2641 13.762,10.0988 13.9403,8.84476 C14.0181,8.29798 14.5244,7.91776 15.0711,7.99552 L14.9547098,7.98576084 Z M11.5137,0.812976 C12.2279,1.16215 12.8814,1.61349 13.4558,2.14905 L14.2929,1.31193 C14.9229,0.681961 16,1.12813 16,2.01904 L16,6.00001 L12.019,6.00001 C11.1281,6.00001 10.6819,4.92287 11.3119,4.29291 L12.0404,3.56441 C11.6222,3.18346 11.1497,2.86125 10.6353,2.60973 C9.49736,2.05342 8.21261,1.87146 6.96499,2.08994 C5.71737,2.30841 4.57089,2.91611 3.68976,3.82599 C2.80862,4.73586 2.23802,5.90125 2.05969,7.15524 C1.98193,7.70202 1.47564,8.08224 0.928858,8.00448 C0.382075,7.92672 0.00185585,7.42043 0.0796146,6.87364 C0.31739,5.20166 1.07818,3.64782 2.25303,2.43465 C3.42788,1.22148 4.95652,0.411217 6.62001,0.119916 C8.2835,-0.171384 9.99651,0.0712178 11.5137,0.812976 Z"/>
+  <svg
+    width="800px"
+    height="800px"
+    viewBox="0 0 16 16"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      fill="#000000"
+      d="M14.9547098,7.98576084 L15.0711,7.99552 C15.6179,8.07328 15.9981,8.57957 15.9204,9.12636 C15.6826,10.7983 14.9218,12.3522 13.747,13.5654 C12.5721,14.7785 11.0435,15.5888 9.37999,15.8801 C7.7165,16.1714 6.00349,15.9288 4.48631,15.187 C3.77335,14.8385 3.12082,14.3881 2.5472,13.8537 L1.70711,14.6938 C1.07714,15.3238 3.55271368e-15,14.8776 3.55271368e-15,13.9867 L3.55271368e-15,9.99998 L3.98673,9.99998 C4.87763,9.99998 5.3238,11.0771 4.69383,11.7071 L3.9626,12.4383 C4.38006,12.8181 4.85153,13.1394 5.36475,13.3903 C6.50264,13.9466 7.78739,14.1285 9.03501,13.9101 C10.2826,13.6916 11.4291,13.0839 12.3102,12.174 C13.1914,11.2641 13.762,10.0988 13.9403,8.84476 C14.0181,8.29798 14.5244,7.91776 15.0711,7.99552 L14.9547098,7.98576084 Z M11.5137,0.812976 C12.2279,1.16215 12.8814,1.61349 13.4558,2.14905 L14.2929,1.31193 C14.9229,0.681961 16,1.12813 16,2.01904 L16,6.00001 L12.019,6.00001 C11.1281,6.00001 10.6819,4.92287 11.3119,4.29291 L12.0404,3.56441 C11.6222,3.18346 11.1497,2.86125 10.6353,2.60973 C9.49736,2.05342 8.21261,1.87146 6.96499,2.08994 C5.71737,2.30841 4.57089,2.91611 3.68976,3.82599 C2.80862,4.73586 2.23802,5.90125 2.05969,7.15524 C1.98193,7.70202 1.47564,8.08224 0.928858,8.00448 C0.382075,7.92672 0.00185585,7.42043 0.0796146,6.87364 C0.31739,5.20166 1.07818,3.64782 2.25303,2.43465 C3.42788,1.22148 4.95652,0.411217 6.62001,0.119916 C8.2835,-0.171384 9.99651,0.0712178 11.5137,0.812976 Z"
+    />
   </svg>
 );
 
 const ShieldIcon = () => (
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="28"
+    height="28"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
   </svg>
 );
 
 const CheckCircleIcon = () => (
-  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="80"
+    height="80"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
     <polyline points="22 4 12 14.01 9 11.01" />
   </svg>
 );
 
 const XCircleIcon = () => (
-  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="80"
+    height="80"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <circle cx="12" cy="12" r="10" />
     <line x1="15" y1="9" x2="9" y2="15" />
     <line x1="9" y1="9" x2="15" y2="15" />
@@ -51,6 +100,9 @@ export default function DragDropCaptcha() {
   const [statusMessage, setStatusMessage] = useState("Ready");
   const [error, setError] = useState(null);
   const [stateToken, setStateToken] = useState(null);
+
+  // fingerprint wrapper from clientFingerprint.js
+  const [fingerprintWrapper, setFingerprintWrapper] = useState(null);
 
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
@@ -71,6 +123,104 @@ export default function DragDropCaptcha() {
 
   const mouseMovements = useRef([]);
 
+  // --------------------------------------
+  // Fingerprint init (once)
+  // --------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fp = await getClientFingerprint(); // { fingerprint: { ... } }
+        if (!cancelled) {
+          setFingerprintWrapper(fp);
+        }
+      } catch (e) {
+        console.error("getClientFingerprint failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --------------------------------------
+  // Rate limit helper
+  // --------------------------------------
+  const checkRateLimitAndMaybeBlock = async (context) => {
+    try {
+      const visitorId = fingerprintWrapper?.fingerprint?.visitorId;
+    
+
+      if (!visitorId) {
+        // fallback: allow, backend still has IP-based / generic rate limiting
+        return { allowed: true };
+      }
+
+      // You defined checkRateLimit(visitorId, context) in ../api.js
+      const rl = await checkRateLimit(visitorId, context);
+      // expected shape: { status: "allow" | "block", retryAfterSeconds?: number, message?: string }
+
+      if (rl.status === "block") {
+        setStatus("failure");
+        setStatusMessage(
+          rl.message ||
+            `Too many attempts. Please try again in ${
+              rl.retryAfterSeconds ?? 60
+            } seconds.`
+        );
+        return { allowed: false };
+      }
+
+      return { allowed: true };
+    } catch (e) {
+      console.error("rate limit check failed", e);
+      // fail-open on client; server still has its own checks
+      return { allowed: true };
+    }
+  };
+
+  // --------------------------------------
+  // Challenge loading / overlay
+  // --------------------------------------
+  const drawOverlay = (data = challenge) => {
+    if (!data) return;
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!canvas || !img) return;
+
+    const width = data.imageWidth ?? img.naturalWidth ?? 400;
+    const height = data.imageHeight ?? img.naturalHeight ?? 340;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    (data.tiles || []).forEach((tile) => {
+      const c = tile.cutout;
+      if (!c) return;
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      ctx.fillRect(c.x, c.y, c.width, c.height);
+      const g = ctx.createLinearGradient(
+        c.x,
+        c.y,
+        c.x + c.width,
+        c.y + c.height
+      );
+      g.addColorStop(0, "rgba(79,70,229,0.85)");
+      g.addColorStop(1, "rgba(16,185,129,0.65)");
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(c.x + 0.5, c.y + 0.5, c.width - 1, c.height - 1);
+    });
+  };
+
   const loadChallenge = async (tokenToSend = null) => {
     setLoading(true);
     setError(null);
@@ -78,6 +228,13 @@ export default function DragDropCaptcha() {
     setStatusMessage("Ready");
 
     try {
+      // client-side rate limit check (server still enforces as source of truth)
+      const rlResult = await checkRateLimitAndMaybeBlock("challenge");
+      if (!rlResult.allowed) {
+        setLoading(false);
+        return;
+      }
+
       const data = await fetchChallenge(tokenToSend);
 
       if (data && data.challengeId != null) {
@@ -123,51 +280,20 @@ export default function DragDropCaptcha() {
 
   useEffect(() => {
     loadChallenge();
-    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const drawOverlay = (data = challenge) => {
-    if (!data) return;
-    const canvas = canvasRef.current;
-    const img = imgRef.current;
-    if (!canvas || !img) return;
-
-    const width = data.imageWidth ?? img.naturalWidth ?? 400;
-    const height = data.imageHeight ?? img.naturalHeight ?? 340;
-    const dpr = window.devicePixelRatio || 1;
-
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
-
-    (data.tiles || []).forEach(tile => {
-      const c = tile.cutout;
-      if (!c) return;
-      ctx.fillStyle = "rgba(0,0,0,0.12)";
-      ctx.fillRect(c.x, c.y, c.width, c.height);
-      const g = ctx.createLinearGradient(c.x, c.y, c.x + c.width, c.y + c.height);
-      g.addColorStop(0, "rgba(79,70,229,0.85)");
-      g.addColorStop(1, "rgba(16,185,129,0.65)");
-      ctx.strokeStyle = g;
-      ctx.lineWidth = 1.6;
-      ctx.strokeRect(c.x + 0.5, c.y + 0.5, c.width - 1, c.height - 1);
-    });
-  };
-
 
   const onImageLoad = () => drawOverlay();
 
+  // --------------------------------------
+  // Pointer / drag
+  // --------------------------------------
   const onPointerDown = (e, tileId) => {
     if (verifying) return;
     const imgEl = e.currentTarget;
     const wrapperEl = imgEl.closest(".tile-wrapper");
     if (!wrapperEl) return;
-    const tile = tiles.find(t => t.tileId === String(tileId));
+    const tile = tiles.find((t) => t.tileId === String(tileId));
     if (!tile) return;
 
     e.stopPropagation();
@@ -200,12 +326,19 @@ export default function DragDropCaptcha() {
       mouseMovements.current.push({
         x: Math.round(e.clientX - rect.left),
         y: Math.round(e.clientY - rect.top),
-        t: Date.now()
+        t: Date.now(),
       });
     }
 
     if (!dragRef.current.active) return;
-    const { wrapperEl, tileId, initialX, initialY, pointerOffsetX, pointerOffsetY } = dragRef.current;
+    const {
+      wrapperEl,
+      tileId,
+      initialX,
+      initialY,
+      pointerOffsetX,
+      pointerOffsetY,
+    } = dragRef.current;
     const imgEl = imgRef.current;
     if (!wrapperEl || !imgEl) return;
 
@@ -213,10 +346,16 @@ export default function DragDropCaptcha() {
     let desiredX = e.clientX - imgRect.left - pointerOffsetX;
     let desiredY = e.clientY - imgRect.top - pointerOffsetY;
 
-    const tile = tiles.find(t => t.tileId === String(tileId));
+    const tile = tiles.find((t) => t.tileId === String(tileId));
     if (tile && challenge) {
-      desiredX = Math.max(0, Math.min(desiredX, challenge.imageWidth - tile.width));
-      desiredY = Math.max(0, Math.min(desiredY, challenge.imageHeight - tile.height));
+      desiredX = Math.max(
+        0,
+        Math.min(desiredX, challenge.imageWidth - tile.width)
+      );
+      desiredY = Math.max(
+        0,
+        Math.min(desiredY, challenge.imageHeight - tile.height)
+      );
     }
 
     const dx = desiredX - initialX;
@@ -226,7 +365,8 @@ export default function DragDropCaptcha() {
 
   const onPointerUp = (e) => {
     if (!dragRef.current.active) return;
-    const { wrapperEl, tileId, pointerOffsetX, pointerOffsetY } = dragRef.current;
+    const { wrapperEl, tileId, pointerOffsetX, pointerOffsetY } =
+      dragRef.current;
     const imgEl = imgRef.current;
     if (!wrapperEl || !imgEl) return;
 
@@ -234,21 +374,42 @@ export default function DragDropCaptcha() {
     let finalX = Math.round(e.clientX - imgRect.left - pointerOffsetX);
     let finalY = Math.round(e.clientY - imgRect.top - pointerOffsetY);
 
-    const tile = tiles.find(t => t.tileId === String(tileId));
+    const tile = tiles.find((t) => t.tileId === String(tileId));
     if (tile && challenge) {
-      finalX = Math.max(0, Math.min(finalX, challenge.imageWidth - tile.width));
-      finalY = Math.max(0, Math.min(finalY, challenge.imageHeight - tile.height));
+      finalX = Math.max(
+        0,
+        Math.min(finalX, challenge.imageWidth - tile.width)
+      );
+      finalY = Math.max(
+        0,
+        Math.min(finalY, challenge.imageHeight - tile.height)
+      );
     }
 
     wrapperEl.style.left = finalX + "px";
     wrapperEl.style.top = finalY + "px";
     wrapperEl.style.transform = "";
 
-    setTiles(prev => prev.map(t => t.tileId === String(tileId) ? { ...t, x: finalX, y: finalY } : t));
+    setTiles((prev) =>
+      prev.map((t) =>
+        t.tileId === String(tileId) ? { ...t, x: finalX, y: finalY } : t
+      )
+    );
 
     wrapperEl.style.willChange = "";
     wrapperEl.classList.remove("dragging");
-    dragRef.current = { active: false, tileId: null, startX:0, startY:0, initialX:0, initialY:0, wrapperEl:null, imgEl:null, pointerOffsetX:0, pointerOffsetY:0 };
+    dragRef.current = {
+      active: false,
+      tileId: null,
+      startX: 0,
+      startY: 0,
+      initialX: 0,
+      initialY: 0,
+      wrapperEl: null,
+      imgEl: null,
+      pointerOffsetX: 0,
+      pointerOffsetY: 0,
+    };
   };
 
   useEffect(() => {
@@ -258,53 +419,87 @@ export default function DragDropCaptcha() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, challenge]);
 
   const rotateTile = (tileId, e) => {
     e?.stopPropagation();
-    setTiles(prev => prev.map(t => t.tileId === String(tileId) ? { ...t, turns: (t.turns + 1) % 4 } : t));
+    setTiles((prev) =>
+      prev.map((t) =>
+        t.tileId === String(tileId)
+          ? { ...t, turns: (t.turns + 1) % 4 }
+          : t
+      )
+    );
   };
 
   const buildVerifyPayloadFromDOM = () => {
     const imgEl = imgRef.current;
-    if (!imgEl) return tiles.map(t => ({ tileId: t.tileId, x: t.x, y: t.y, turn: t.turns }));
+    if (!imgEl)
+      return tiles.map((t) => ({
+        tileId: t.tileId,
+        x: t.x,
+        y: t.y,
+        turn: t.turns,
+      }));
     const imgRect = imgEl.getBoundingClientRect();
-    return tiles.map(t => {
-      const wrapper = document.querySelector(`.tile-wrapper[data-tile-id="${CSS.escape(t.tileId)}"]`);
-      if (!wrapper) return { tileId: t.tileId, x: t.x, y: t.y, turn: t.turns };
+    return tiles.map((t) => {
+      const wrapper = document.querySelector(
+        `.tile-wrapper[data-tile-id="${CSS.escape(t.tileId)}"]`
+      );
+      if (!wrapper)
+        return { tileId: t.tileId, x: t.x, y: t.y, turn: t.turns };
       const wRect = wrapper.getBoundingClientRect();
       let x = Math.round(wRect.left - imgRect.left);
       let y = Math.round(wRect.top - imgRect.top);
       if (challenge) {
-        x = Math.max(0, Math.min(x, challenge.imageWidth - wrapper.offsetWidth));
-        y = Math.max(0, Math.min(y, challenge.imageHeight - wrapper.offsetHeight));
+        x = Math.max(
+          0,
+          Math.min(x, challenge.imageWidth - wrapper.offsetWidth)
+        );
+        y = Math.max(
+          0,
+          Math.min(y, challenge.imageHeight - wrapper.offsetHeight)
+        );
       }
       return { tileId: t.tileId, x, y, turn: t.turns };
     });
   };
 
+  // --------------------------------------
+  // Verify
+  // --------------------------------------
   const handleVerify = async () => {
     if (!challenge) return;
     setVerifying(true);
     setStatusMessage("Verifying...");
 
-    const payloadTiles = buildVerifyPayloadFromDOM();
-    const payload = {
-      challengeId: challenge.challengeId,
-      tiles: payloadTiles,
-      mouse: {
-        viewportWidth: containerRef.current?.offsetWidth || 0,
-        viewportHeight: containerRef.current?.offsetHeight || 0,
-        events: mouseMovements.current
-      }
-    };
-
     try {
+      // client-side rate limit check before hitting /verify
+      const rlResult = await checkRateLimitAndMaybeBlock("verify");
+      if (!rlResult.allowed) {
+        setVerifying(false);
+        return;
+      }
+
+      const payloadTiles = buildVerifyPayloadFromDOM();
+      const payload = {
+        challengeId: challenge.challengeId,
+        tiles: payloadTiles,
+        mouse: {
+          viewportWidth: containerRef.current?.offsetWidth || 0,
+          viewportHeight: containerRef.current?.offsetHeight || 0,
+          events: mouseMovements.current,
+        },
+        fingerprint: fingerprintWrapper?.fingerprint || null,
+      };
+
       const res = await verifyChallenge(
         payload.challengeId,
         payload.tiles,
         payload.mouse,
-        stateToken
+        stateToken,
+        payload.fingerprint
       );
 
       const result =
@@ -312,7 +507,8 @@ export default function DragDropCaptcha() {
         res?.status ??
         (res?.success === true ? "pass" : "fail");
 
-      const verifyStateToken = res?.stateToken ?? res?.state_token ?? stateToken;
+      const verifyStateToken =
+        res?.stateToken ?? res?.state_token ?? stateToken;
       if (verifyStateToken) {
         setStateToken(verifyStateToken);
       }
@@ -324,6 +520,7 @@ export default function DragDropCaptcha() {
         setStatus("failure");
         setStatusMessage("Verification failed");
       } else {
+        // "dicey" / "cant-say" / equivalent
         setStatus("cant-say");
         setStatusMessage("Can't determine");
 
@@ -363,12 +560,12 @@ export default function DragDropCaptcha() {
         gap: 32,
       }}
     >
-      {/* LEFT: image + 7px padding outside stage */}
+      {/* LEFT: image + stage */}
       <div
         ref={containerRef}
         style={{
           flex: "0 0 auto",
-          padding: 0, 
+          padding: 0,
           borderRadius: 16,
           display: "flex",
           justifyContent: "center",
@@ -554,9 +751,7 @@ export default function DragDropCaptcha() {
           <span>Status:</span>
           <span className={`status-text ${status}`}>{statusMessage}</span>
         </div>
-        {error && (
-          <div style={{ color: "var(--error-color)" }}>{error}</div>
-        )}
+        {error && <div style={{ color: "var(--error-color)" }}>{error}</div>}
         <div className="panel-actions">
           <button
             className="btn btn-verify"
